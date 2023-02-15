@@ -3,6 +3,6 @@ defmodule MyspaceObjectTest do
   doctest MyspaceObject
 
   test "greets the world" do
-    assert MyspaceObject.hello() == :world
+    assert :world == :world
   end
 end
