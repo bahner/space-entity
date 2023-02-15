@@ -9,8 +9,12 @@ defmodule MyspaceObject.MixProject do
       app: :myspace_object,
       version: "0.1.0",
       elixir: "~> 1.14",
+      name: "Myspace Object",
+      deps: deps(),
+      description: "Generic actor model object for uses in IPFS",
+      package: package(),
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      source_url: "https://github.com/bahner/myspace-object",
     ]
   end
 
@@ -31,6 +35,15 @@ defmodule MyspaceObject.MixProject do
       {:dialyxir, "~> 1.2", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.29", only: :dev, runtime: false},
       {:excoveralls, "~> 0.15", only: :test, runtime: false}
+    ]
+  end
+
+  defp package do
+    [
+      files: ["lib", "mix.exs", "README*", "LICENSE*"],
+      maintainers: ["Lars Bahner"],
+      licenses: ["GNU GPLv3"],
+      links: %{"GitHub" => "https://github.com/bahner/myspace-object"}
     ]
   end
 end

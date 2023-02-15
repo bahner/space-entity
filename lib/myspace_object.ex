@@ -204,6 +204,7 @@ defmodule MyspaceObject do
         {:noreply, state}
     end
   end
+
   # Helpers
   defp get_or_create_key!(id) when is_binary(id) do
     case get_ipns_key(id) do
