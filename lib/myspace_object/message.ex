@@ -28,7 +28,7 @@ defmodule MyspaceObject.Message do
   defp get_recipient_public_key!(recipient) do
     # So this is cheating. Get the key from the sender's vault.
     # Ekko, er du der?
-    GenServer.call(String.to_atom(recipient), :public_key)
+    GenServer.call(String.to_atom(recipient), :process_public_key)
   end
 
   defp encrypt_message_to_public_key!(message, recipient) do

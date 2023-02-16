@@ -1,75 +1,116 @@
 defmodule MyspaceObject.Ipid do
   @moduledoc false
 
-  require Logger
+  use GenServer
 
+  require Logger
+  import MyspaceObject.Utils
+
+  # The context is the list of JSON-LD contexts that are used to interpret the IPID.
+  # This is *not* correct at the moment, but it is a start.
   @context [
     "https://www.w3.org/ns/did/v1",
     "https://w3id.org/security/suites/ed25519-2020/v1"
   ]
 
-  @enforce_keys [:id, :context, :created, :updated, :public_key]
+  @enforce_keys [:id, :context, :created, :public_key]
   defstruct id: nil,
             context: @context,
-            created: nil,
-            updated: nil,
-            public_key: %{/: nil},
-            verification_method: nil
+            created: now(),
+            updated: now(),
+            public_key: MyspaceObject.Link.new("")
 
-  # FIXME: created time is wrong. Should be the time of the first message.
-  # @spec new(MyspaceObject.t()) :: MyspaceObject.ipid()
-  @spec new(%{
-          :created => %{:calendar => any, optional(any) => any},
-          :id => atom,
-          :ipns => any,
-          :public_key => atom | %{:cid => any, optional(any) => any},
-          optional(any) => any
-        }) :: %MyspaceObject.Ipid{
-          context: [<<_::224, _::_*160>>, ...],
-          created: binary,
-          id: <<_::64, _::_*8>>,
-          public_key: %{/: any},
-          updated: binary,
-          verification_method: <<_::64, _::_*8>>
+  @typedoc """
+  The IPID is the object that is stored in the Myspace.
+  """
+  @type t :: %__MODULE__{
+          id: binary(),
+          context: list(),
+          created: binary(),
+          updated: binary(),
+          public_key: MyspaceObject.Link.t()
         }
-  def new(object) when is_map(object) do
-    id = Atom.to_string(object.id)
-    did = "did:ipid:#{object.ipns}##{id}"
-    created = object.created |> DateTime.to_iso8601()
-    now = DateTime.utc_now() |> DateTime.to_iso8601()
-    public_key = object.public_key.cid
 
+  @spec start_link :: :ignore | {:error, any} | {:ok, pid}
+  def start_link, do: GenServer.start(__MODULE__, %{}, name: __MODULE__)
+
+  @spec init(map) :: {:ok, nil}
+  def init(state), do: {:ok, state}
+
+  @doc """
+  Publish the IPID to IPFS. Returns :ok here, and then delivers the ipid
+  back to the calling process, in a {:ipid_publish, MySpaceObject.ipid()} message.
+  """
+  @spec publish({MyspaceObject.t(), pid}) :: :ok
+  def publish(object) do
+    GenServer.call(__MODULE__, {:publish, object})
+    :ok
+  end
+
+  # @spec new!(MyspaceObject.t()) :: t()
+  @spec new!(MyspaceObject.t()) :: t()
+  def new!(object) when is_map(object) do
     %__MODULE__{
-      id: did,
+      id: gen_did!(object),
       context: @context,
-      public_key: %{/: public_key},
-      created: created,
-      updated: now,
-      verification_method: did
+      public_key: MyspaceObject.Link.new(object.public_key.cid),
+      created: object.created,
+      updated: now()
     }
   end
 
-  @spec json(MyspaceObject.t()) :: binary()
-  def json(object) do
-    Jason.encode!(Map.from_struct(new(object)))
+  @spec new(MyspaceObject.t()) :: {:ok, t()}
+  def new(object) when is_map(object) do
+    {:ok, new!(object)}
   end
 
-  @spec publish(MyspaceObject.t()) :: {:ipid_publish, binary()}
+  @spec handle_cast(any, any, any) :: {:noreply, any}
   @doc """
   Publish the IPID to IPFS. Returns the IPFS CID of the IPID.
   """
-  def publish(object) do
-    Logger.debug("Publishing IPID for #{object.id}")
-    {:ok, add_result} = MyspaceIPFS.add(json(object))
-    cid = add_result.hash
-    MyspaceIPFS.Name.publish(cid, key: object.id)
-    {:ipid_publish, cid}
+  def handle_cast({:publish_ipid, object}, _from, state) do
+    Task.async(fn -> ipid_add(object) end)
+    {:noreply, state}
   end
 
-  @spec put(MyspaceObject.t()) :: {:ipid_put, binary()}
-  def put(object) do
-    Logger.debug("Updating IPLD for #{object.id}")
-    {:ok, link} = MyspaceIPFS.Dag.put(json(object))
-    {:ipid_put, link./}
+  def handle_info({:ipid_add_reply, {cid, ipid}}, state) do
+    Task.async(fn -> ipid_publish({cid, ipid}) end)
+    {:noreply, state}
+  end
+
+  defp ipid_add(ipid) do
+    start = Time.utc_now()
+    {:ok, cid} = MyspaceIPFS.add(json(ipid))
+    Logger.debug("Publication of IPID DAG finished in #{seconds_since(start)} seconds")
+    {:ipid_add_reply, {cid, ipid}}
+  end
+
+  defp ipid_publish({cid, ipid}) when is_binary(cid) do
+    start = Time.utc_now()
+    # Here we extract the fragment from the IPID, and use it to lookup up the
+    # key. If it doesn't match the IPNS name hash then the id is useless.
+    # That's supposed to be a good thing.
+    MyspaceIPFS.Name.publish(cid, key: fragment(ipid.id))
+    Logger.debug("Publication of IPID finished in #{seconds_since(start)} seconds")
+    :ok
+  end
+
+  defp json(object) do
+    Jason.encode!(Map.from_struct(new!(object)))
+  end
+
+  defp fragment(ipid) do
+    {_, fragment} = split_ipid(ipid)
+    fragment
+  end
+
+  defp split_ipid(ipid) do
+    [did, fragment] = String.split(ipid, "#")
+    [_, _, id] = String.split(did, ":")
+    {id, fragment}
+  end
+
+  defp gen_did!(object) when is_atom(object.id) and is_binary(object.ipns) do
+    "did:ipid:" <> object.ipns <> "#" <> Atom.to_string(object.id)
   end
 end
