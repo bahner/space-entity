@@ -8,7 +8,6 @@ defmodule MyspaceObject do
   use GenServer
   require Logger
 
-  alias MyspaceObject.Ipid
   import MyspaceObject.Utils
 
   # This starts with an empty object, but this could very well contain lots of stuff.
@@ -189,12 +188,6 @@ defmodule MyspaceObject do
   # Casts
   # Don't wait for answers and how to handle them at this point.
   # Just assume it works.
-  @spec handle_cast(:ipid_publish, t()) :: {:noreply, t()}
-  def handle_cast(:ipid_publish, state) do
-    Logger.debug("Publishing object #{inspect(state)}")
-    Task.async(fn -> Ipid.publish(state) end)
-    {:noreply, state}
-  end
 
   def handle_cast(:sync_process, state) do
     %__MODULE__{
@@ -206,6 +199,8 @@ defmodule MyspaceObject do
           ),
         ipns: Process.get(:ipns)
     }
+
+    {:noreply, state}
   end
 
   # The following should block. It's a major operation on the object.
@@ -234,14 +229,6 @@ defmodule MyspaceObject do
         {:noreply, state}
     end
   end
-
-  # @spec object_publish(map()) :: {:object_publish_reply, binary()}
-  # defp object_publish(object) when is_map(object) do
-  #   start = now()
-  #   {:ok, link} = MyspaceIPFS.Dag.put(object)
-  #   Logger.debug("Published object in #{seconds_since(start)}ms")
-  #   {:object_publish_reply, link./}
-  # end
 
   defp ipns!(id) do
     get_or_create_ipfs_key!(Atom.to_string(id))

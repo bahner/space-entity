@@ -38,6 +38,14 @@ defmodule MyspaceObject.Utils do
   end
 
   @doc """
+  Takes a struct and returns a map with the same keys and values.
+  """
+  @spec json_encode_struct(any) :: binary()
+  def json_encode_struct(object) do
+    Jason.encode!(Map.from_struct(object))
+  end
+
+  @doc """
   Returns the current time in ISO8601 format.
   """
   @spec now() :: binary

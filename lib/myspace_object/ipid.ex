@@ -41,9 +41,12 @@ defmodule MyspaceObject.Ipid do
   Publish the IPID to IPFS. Returns :ok here, and then delivers the ipid
   back to the calling process, in a {:ipid_publish, MySpaceObject.ipid()} message.
   """
-  @spec publish({MyspaceObject.t(), pid}) :: :ok
+  @spec publish(MyspaceObject.t()) :: :ok
   def publish(object) do
-    GenServer.call(__MODULE__, {:publish, object})
+    # This is a pipeline. Send it to add, which will then pass it to publish.
+    # ipid_add wll never need to be called directly. Use MyspaceIPFS.add directly
+    # for that.
+    GenServer.cast(__MODULE__, {:ipid_publish_add, object})
     :ok
   end
 
@@ -51,7 +54,7 @@ defmodule MyspaceObject.Ipid do
   @spec new!(MyspaceObject.t()) :: t()
   def new!(object) when is_map(object) do
     %__MODULE__{
-      id: gen_did!(object),
+      id: did_gen!(object),
       context: @context,
       public_key: MyspaceObject.Link.new(object.public_key.cid),
       created: object.created,
@@ -68,21 +71,54 @@ defmodule MyspaceObject.Ipid do
   @doc """
   Publish the IPID to IPFS. Returns the IPFS CID of the IPID.
   """
-  def handle_cast({:publish_ipid, object}, _from, state) do
-    Task.async(fn -> ipid_add(object) end)
+  def handle_cast({:ipid_publish_add, object}, _from, state) do
+    Task.async(fn -> ipid_publish_add(object) end)
     {:noreply, state}
   end
 
-  def handle_info({:ipid_add_reply, {cid, ipid}}, state) do
+  def handle_info({:ipid_publish_add_reply, {cid, ipid}}, state) do
     Task.async(fn -> ipid_publish({cid, ipid}) end)
     {:noreply, state}
   end
 
-  defp ipid_add(ipid) do
+  @doc """
+  Extract the fragment from the IPID. This is the NanoID.
+
+  This function has a high concentration of sugar.
+  """
+  @spec did_fragment!(binary()) :: binary()
+  def did_fragment!(did) do
+    {_, fragment} = did_parse!(did)
+    fragment
+  end
+
+  @doc """
+  Split the IPID into its constituent parts.
+  did:ipid:ipns#fragment. Returns a tuple of {ipns, fragment},
+  eg {"Qm...", "NanoID"}
+
+  Obiously "did:ipid" is ignored.
+  """
+  @spec did_parse!(binary()) :: {binary(), binary()}
+  def did_parse!(ipid) do
+    [did, fragment] = String.split(ipid, "#")
+    [_, _, ipns] = String.split(did, ":")
+    {ipns, fragment}
+  end
+
+  @doc """
+  Generate an IPID from the IPNS name and the NanoID.
+  """
+  @spec did_gen!(MyspaceObject.t()) :: binary()
+  def did_gen!(object) when is_atom(object.id) and is_binary(object.ipns) do
+    "did:ipid:" <> object.ipns <> "#" <> Atom.to_string(object.id)
+  end
+
+  defp ipid_publish_add(ipid) do
     start = Time.utc_now()
-    {:ok, cid} = MyspaceIPFS.add(json(ipid))
-    Logger.debug("Publication of IPID DAG finished in #{seconds_since(start)} seconds")
-    {:ipid_add_reply, {cid, ipid}}
+    {:ok, cid} = MyspaceIPFS.add(json_encode_struct(ipid))
+    Logger.info("Publication of IPID yielding #{cid} finished in #{seconds_since(start)} seconds")
+    {:ipid_publish_add_reply, {cid, ipid}}
   end
 
   defp ipid_publish({cid, ipid}) when is_binary(cid) do
@@ -90,27 +126,8 @@ defmodule MyspaceObject.Ipid do
     # Here we extract the fragment from the IPID, and use it to lookup up the
     # key. If it doesn't match the IPNS name hash then the id is useless.
     # That's supposed to be a good thing.
-    MyspaceIPFS.Name.publish(cid, key: fragment(ipid.id))
+    MyspaceIPFS.Name.publish(cid, key: did_fragment!(ipid.id))
     Logger.debug("Publication of IPID finished in #{seconds_since(start)} seconds")
     :ok
-  end
-
-  defp json(object) do
-    Jason.encode!(Map.from_struct(new!(object)))
-  end
-
-  defp fragment(ipid) do
-    {_, fragment} = split_ipid(ipid)
-    fragment
-  end
-
-  defp split_ipid(ipid) do
-    [did, fragment] = String.split(ipid, "#")
-    [_, _, id] = String.split(did, ":")
-    {id, fragment}
-  end
-
-  defp gen_did!(object) when is_atom(object.id) and is_binary(object.ipns) do
-    "did:ipid:" <> object.ipns <> "#" <> Atom.to_string(object.id)
   end
 end
