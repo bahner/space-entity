@@ -7,7 +7,7 @@ defmodule MyspaceObject.MixProject do
   def project do
     [
       app: :myspace_object,
-      version: "0.1.0-alpha.1",
+      version: "0.1.0-alpha.2",
       elixir: "~> 1.14",
       name: "Myspace Object",
       deps: deps(),
