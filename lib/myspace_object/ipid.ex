@@ -37,20 +37,21 @@ defmodule MyspaceObject.Ipid do
   @spec init(map) :: {:ok, nil}
   def init(state), do: {:ok, state}
 
-  @doc """
-  Publish the IPID to IPFS. Returns :ok here, and then delivers the ipid
-  back to the calling process, in a {:ipid_publish, MySpaceObject.ipid()} message.
-  """
-  @spec publish(MyspaceObject.t()) :: :ok
-  def publish(object) do
-    # This is a pipeline. Send it to add, which will then pass it to publish.
-    # ipid_add wll never need to be called directly. Use MyspaceIPFS.add directly
-    # for that.
-    GenServer.cast(__MODULE__, {:ipid_publish_add, object})
-    :ok
-  end
+  # @spec get!(binary()) :: t()
+  # def get!(id) do
+  #   data = MyspaceIPFS.get(id)
+  #   data
+  #   # data = Jason.decode!("#{data}")
 
-  # @spec new!(MyspaceObject.t()) :: t()
+  #   # %__MODULE__{
+  #   #   id: data.id,
+  #   #   context: data["@context"],
+  #   #   public_key: data.public_key,
+  #   #   created: data.created,
+  #   #   updated: data.updated
+  #   # }
+  # end
+
   @spec new!(MyspaceObject.t()) :: t()
   def new!(object) when is_map(object) do
     %__MODULE__{
@@ -65,6 +66,19 @@ defmodule MyspaceObject.Ipid do
   @spec new(MyspaceObject.t()) :: {:ok, t()}
   def new(object) when is_map(object) do
     {:ok, new!(object)}
+  end
+
+  @doc """
+  Publish the IPID to IPFS. Returns :ok here, and then delivers the ipid
+  back to the calling process, in a {:ipid_publish, MySpaceObject.ipid()} message.
+  """
+  @spec publish(MyspaceObject.t()) :: :ok
+  def publish(object) do
+    # This is a pipeline. Send it to add, which will then pass it to publish.
+    # ipid_add wll never need to be called directly. Use MyspaceIPFS.add directly
+    # for that.
+    GenServer.cast(__MODULE__, {:ipid_publish_add, object})
+    :ok
   end
 
   @spec handle_cast(any, any, any) :: {:noreply, any}

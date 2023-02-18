@@ -86,15 +86,21 @@ defmodule MyspaceObject do
 
     [ipns | [public_key]] = Enum.map(Task.yield_many(tasks), &get_task_result/1)
 
-    {:ok,
-     %__MODULE__{
-       id: state.id,
-       created: state.created,
-       dag: state.dag,
-       ipns: ipns,
-       object: ipld_contents!(state.dag),
-       public_key: public_key
-     }}
+    object = %__MODULE__{
+      id: state.id,
+      created: state.created,
+      dag: state.dag,
+      ipns: ipns,
+      object: ipld_contents!(state.dag),
+      public_key: public_key
+    }
+
+    # Publish the IPID object to IPNS.
+    # This might take a little while, so we do it in the background.
+    # We are not likely to receive any messages before this is done.
+    Task.async(fn -> MyspaceObject.Ipid.publish(object) end)
+
+    {:ok, object}
   end
 
   # FIXME: this should probably be handled by a task supervisor or a rest supervisor.
@@ -124,6 +130,42 @@ defmodule MyspaceObject do
     {:ok, new!(dag)}
   end
 
+  # Getters
+  @spec created(t()) :: binary()
+  def created(object) do
+    GenServer.call(object.id, :created)
+  end
+
+  @spec dag(t()) :: binary()
+  def dag(object) do
+    GenServer.call(object.id, :dag)
+  end
+
+  @spec ipns(t()) :: binary()
+  def ipns(object) do
+    GenServer.call(object.id, :ipns)
+  end
+
+  @spec ipid(t()) :: MyspaceObject.Ipid.t()
+  def ipid(object) do
+    GenServer.call(object.id, :ipid)
+  end
+
+  @spec object(t()) :: binary()
+  def object(object) do
+    GenServer.call(object.id, :object)
+  end
+
+  @spec public_key(t()) :: binary()
+  def public_key(object) do
+    GenServer.call(object.id, :public_key)
+  end
+
+  @spec state(t()) :: binary()
+  def state(object) do
+    GenServer.call(object.id, :state)
+  end
+
   @spec sync_process :: :ok
   def sync_process() do
     GenServer.cast(self(), :sync_process)
@@ -134,8 +176,16 @@ defmodule MyspaceObject do
     {:reply, state.id, state}
   end
 
+  def handle_call(:created, _from, state) do
+    {:reply, state.created, state}
+  end
+
   def handle_call(:dag, _from, state) do
     {:reply, state.dag, state}
+  end
+
+  def handle_call(:ipid, _from, state) do
+    {:reply, MyspaceObject.Ipid.new!(state), state}
   end
 
   def handle_call(:ipns, _from, state) do
@@ -146,12 +196,12 @@ defmodule MyspaceObject do
     {:reply, state.object, state}
   end
 
-  def handle_call(:process_ex_public_key, _from, state) do
-    {:reply, Process.get(:process_ex_public_key), state}
+  def handle_call(:public_key, _from, state) do
+    {:reply, state.public_key, state}
   end
 
-  def handle_call(:process_public_key, _from, state) do
-    {:reply, state.public_key, state}
+  def handle_call(:state, _from, state) do
+    {:reply, state, state}
   end
 
   # Methods
@@ -171,19 +221,19 @@ defmodule MyspaceObject do
     end
   end
 
-  def handle_call({:message, message, recipient}, _from, state) do
-    # By using the recipient as the key, we can use the same key to encrypt the message and the signature.
-    {:ok, encrypted_message} = ExPublicKey.encrypt_public(message, state.public_key)
+  # # def handle_call({:message, message, recipient}, _from, state) do
+  # #   # By using the recipient as the key, we can use the same key to encrypt the message and the signature.
+  # #   {:ok, encrypted_message} = ExPublicKey.encrypt_public(message, state.public_key)
 
-    message = MyspaceObject.Message.new(encrypted_message, recipient, state.id)
-    signed_message = ExPublicKey.sign(message, Process.get(:private_key))
+  # #   message = MyspaceObject.Message.new(encrypted_message, recipient, state.id)
+  # #   signed_message = ExPublicKey.sign(message, Process.get(:private_key))
 
-    {:reply, signed_message, state}
-  end
+  # #   {:reply, signed_message, state}
+  # # end
 
-  def handle_call(msg, _from, state) do
-    {:reply, msg, state}
-  end
+  # # def handle_call(msg, _from, state) do
+  # #   {:reply, msg, state}
+  # # end
 
   # Casts
   # Don't wait for answers and how to handle them at this point.
@@ -227,6 +277,9 @@ defmodule MyspaceObject do
       {:DOWN, _ref, :process, _pid, _reason} ->
         Logger.debug("DOWN: #{inspect(msg)}")
         {:noreply, state}
+      _ ->
+        Logger.warning("Unhandled message: #{inspect(msg)}")
+        {:noreply, state}
     end
   end
 
@@ -241,7 +294,10 @@ defmodule MyspaceObject do
     # This operation might take time.
     public_key_cid = publish_to_ipfs!(public_key_pem)
 
-    MyspaceObject.PublicKey.new!(public_key_cid, public_key_pem)
+    %MyspaceObject.PublicKey{
+      pem: public_key_pem,
+      cid: public_key_cid
+    }
   end
 
   defp get_task_result(task) do

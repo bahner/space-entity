@@ -4,20 +4,36 @@ defmodule MyspaceObject.Supervisor do
   """
   use Supervisor
 
-  @spec start_link(list(MyspaceObject.t())) :: :ignore | {:error, any} | {:ok, pid}
-  def start_link(objects \\ []) when is_list(objects) do
+  @spec start_link(list(MyspaceObject.t()) | MyspaceObject.t()) ::
+          :ignore | {:error, any} | {:ok, pid}
+  def start_link(objects) when is_list(objects) do
     Supervisor.start_link(__MODULE__, objects, name: __MODULE__)
   end
 
-  def init(objects) do
-    children = create_children(objects)
+  def start_link(object) when is_map(object) do
+    Supervisor.start_link(__MODULE__, [object], name: __MODULE__)
+  end
 
+  @spec start_link :: :ignore | {:error, any} | {:ok, pid}
+  def start_link() do
+    Supervisor.start_link(__MODULE__, :ok, name: __MODULE__)
+  end
+
+  def init(objects) when is_list(objects) do
+    children = create_children(objects)
     Supervisor.init(children, strategy: :one_for_one)
+  end
+
+  def init(:ok) do
+    Supervisor.init([], strategy: :one_for_one)
   end
 
   @spec add(MyspaceObject.t()) :: :ok
   def add(object) do
-    Enum.each(create_object_children(object), fn child -> Supervisor.start_child(__MODULE__, child) end)
+    Enum.each(create_object_children(object), fn child ->
+      Supervisor.start_child(__MODULE__, child)
+    end)
+
     :ok
   end
 
