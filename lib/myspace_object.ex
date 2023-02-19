@@ -277,6 +277,7 @@ defmodule MyspaceObject do
       {:DOWN, _ref, :process, _pid, _reason} ->
         Logger.debug("DOWN: #{inspect(msg)}")
         {:noreply, state}
+
       _ ->
         Logger.warning("Unhandled message: #{inspect(msg)}")
         {:noreply, state}

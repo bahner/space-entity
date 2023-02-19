@@ -5,6 +5,13 @@ defmodule MyspaceObject.Utils do
   alias MyspaceIPFS.Key
 
   @doc """
+  Creates a channel atom from an ID. Basically, it just prepends "channel@" to the ID.
+  """
+  def create_channel_atom(id) do
+    String.to_atom("channel@" <> Atom.to_string(id))
+  end
+
+  @doc """
   Fetches a key from the IPFS keychain. If the key is not found, it is created.
   """
   @spec get_or_create_ipfs_key!(binary()) :: binary()

@@ -31,7 +31,8 @@ defmodule MyspaceObject.MixProject do
     [
       {:nanoid, "~> 2.0"},
       {:ex_crypto, "~> 0.10.0"},
-      {:myspace_ipfs, "~> 0.2.0-alpha"},
+      # {:myspace_ipfs, "~> 0.2.0-alpha"},
+      {:myspace_ipfs, git: "https://github.com/bahner/myspace-ipfs.git", tag: "pubsub2"},
       {:credo, "~> 1.6", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.2", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.29", only: :dev, runtime: false},

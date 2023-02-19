@@ -4,61 +4,34 @@ defmodule MyspaceObject.Supervisor do
   """
   use Supervisor
 
-  @spec start_link(list(MyspaceObject.t()) | MyspaceObject.t()) ::
+  @typep objects :: list(MyspaceObject.t())
+
+  @spec start_link(objects, list()) ::
           :ignore | {:error, any} | {:ok, pid}
-  def start_link(objects) when is_list(objects) do
-    Supervisor.start_link(__MODULE__, objects, name: __MODULE__)
+  def start_link(objects, opts) do
+    Supervisor.start_link(__MODULE__, objects, opts)
   end
 
-  def start_link(object) when is_map(object) do
-    Supervisor.start_link(__MODULE__, [object], name: __MODULE__)
+  def init(objects) do
+    workers = create_workers(objects)
+    Supervisor.init(workers, strategy: :one_for_one)
   end
 
-  @spec start_link :: :ignore | {:error, any} | {:ok, pid}
-  def start_link() do
-    Supervisor.start_link(__MODULE__, :ok, name: __MODULE__)
+  @spec add(Supervisor.child_spec()) :: Supervisor.on_start()
+  def add(worker) do
+    Supervisor.start_child(__MODULE__, worker)
   end
 
-  def init(objects) when is_list(objects) do
-    children = create_children(objects)
-    Supervisor.init(children, strategy: :one_for_one)
+  @spec new!(MyspaceObject.t()) :: Supervisor.child_spec()
+  def new!(object) do
+    child_spec(%{
+      id: object.id,
+      start: {MyspaceObject, :start_link, [object, name: object.id]}
+    })
   end
 
-  def init(:ok) do
-    Supervisor.init([], strategy: :one_for_one)
-  end
-
-  @spec add(MyspaceObject.t()) :: :ok
-  def add(object) do
-    Enum.each(create_object_children(object), fn child ->
-      Supervisor.start_child(__MODULE__, child)
-    end)
-
-    :ok
-  end
-
-  @spec create_object_children(MyspaceObject.t()) :: [Supervisor.child_spec()]
-  defp create_object_children(object) do
-    [
-      %{
-        id: object.id,
-        start: {MyspaceObject, :start_link, [object]}
-      },
-      %{
-        id: create_channel_atom(object.id),
-        start: {MyspaceIPFS.PubSubChannel, :start_link, [object.id, Atom.to_string(object.id)]}
-      }
-    ]
-  end
-
-  @spec create_children(list(MyspaceObject.t())) :: list
-  defp create_children(objects) do
-    objects
-    |> Enum.map(&create_object_children/1)
-    |> List.flatten()
-  end
-
-  defp create_channel_atom(id) do
-    String.to_atom("channel@" <> Atom.to_string(id))
+  @spec create_workers([MyspaceObject.t()]) :: [Supervisor.child_spec()]
+  defp create_workers(objects) do
+    Enum.map(objects, &new!/1)
   end
 end

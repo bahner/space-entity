@@ -4,9 +4,17 @@ defmodule MyspaceObject.Application do
   """
   use Application
 
+  @object_worker %{
+    id: MyspaceObject.Supervisor,
+    start: {MyspaceObject.Supervisor, :start_link, [[], [name: MyspaceObject.Supervisor]]},
+    type: :supervisor
+  }
+
   @impl true
-  @spec start(any, any) :: {:error, any} | {:ok, pid()} | {:ok, pid(), any}
+  @spec start(any, any) :: {:error, any} | {:ok, pid}
   def start(_type, _args) do
-    MyspaceObject.Supervisor.start_link()
+    children = [@object_worker]
+
+    Supervisor.start_link(children, strategy: :one_for_one)
   end
 end
