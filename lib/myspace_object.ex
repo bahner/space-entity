@@ -175,16 +175,16 @@ defmodule MyspaceObject do
   end
 
   # Getters
-  def handle_call(:id, _from, state) do
-    {:reply, state.id, state}
-  end
-
   def handle_call(:created, _from, state) do
     {:reply, state.created, state}
   end
 
   def handle_call(:dag, _from, state) do
     {:reply, state.dag, state}
+  end
+
+  def handle_call(:id, _from, state) do
+    {:reply, state.id, state}
   end
 
   def handle_call(:ipid, _from, state) do
@@ -207,36 +207,33 @@ defmodule MyspaceObject do
     {:reply, state, state}
   end
 
+  # Setters
+  def handle_call({:object_update, dag}, _from, state) do
+    {:noreply, %{state | object: ipld_contents!(dag)}}
+  end
+
   # Methods
-  def handle_call({:decrypt_public, message}, from, state) do
-    if from == self() do
-      {:reply, ExPublicKey.decrypt_public(message, state.public_key), state}
-    else
-      {:noreply, state}
-    end
+  def handle_call({:decrypt_public, message}, _from, state) do
+    {:reply, ExPublicKey.decrypt_public(message, state.public_key), state}
   end
 
-  def handle_call({:sign, message}, from, state) do
-    if from == self() do
-      {:reply, ExPublicKey.sign(message, Process.get(:private_key)), state}
-    else
-      {:noreply, state}
-    end
+  def handle_call({:sign, message}, _from, state) do
+    {:reply, ExPublicKey.sign(message, Process.get(:private_key)), state}
   end
 
-  # # def handle_call({:message, message, recipient}, _from, state) do
-  # #   # By using the recipient as the key, we can use the same key to encrypt the message and the signature.
-  # #   {:ok, encrypted_message} = ExPublicKey.encrypt_public(message, state.public_key)
+  # def handle_call({:message, message, recipient}, _from, state) do
+  #   # By using the recipient as the key, we can use the same key to encrypt the message and the signature.
+  #   {:ok, encrypted_message} = ExPublicKey.encrypt_public(message, state.public_key)
 
-  # #   message = MyspaceObject.Message.new(encrypted_message, recipient, state.id)
-  # #   signed_message = ExPublicKey.sign(message, Process.get(:private_key))
+  #   message = MyspaceObject.Message.new(encrypted_message, recipient, state.id)
+  #   signed_message = ExPublicKey.sign(message, Process.get(:private_key))
 
-  # #   {:reply, signed_message, state}
-  # # end
+  #   {:reply, signed_message, state}
+  # end
 
-  # # def handle_call(msg, _from, state) do
-  # #   {:reply, msg, state}
-  # # end
+  # def handle_call(msg, _from, state) do
+  #   {:reply, msg, state}
+  # end
 
   # Casts
   # Don't wait for answers and how to handle them at this point.
@@ -256,23 +253,22 @@ defmodule MyspaceObject do
     {:noreply, state}
   end
 
-  # The following should block. It's a major operation on the object.
-  @spec handle_call({:object_update, binary}, t()) :: {:noreply, t()}
-  def handle_call({:object_update, dag}, state) do
-    {:noreply, %{state | object: ipld_contents!(dag)}}
-  end
-
   @spec handle_cast(any, any, any) :: {:reply, any, any}
   def handle_cast(msg, _from, state) do
     {:reply, msg, state}
   end
 
-  def handle_info({_task, {:object_publish_reply, dag}}, state) do
+  def handle_info({:object_publish_reply, dag}, state) do
     {:noreply, %{state | dag: dag}}
   end
 
-  def handle_info({_task, {:dag_update, dag}}, state) do
+  def handle_info({:dag_update, dag}, state) do
     {:noreply, %{state | dag: dag}}
+  end
+
+  def handle_info({:myspace_ipfs_pubsub_channel_message, msg}, state) do
+    IO.puts("MyspaceObject: IPFS pubsub channel message #{msg} received.")
+    {:noreply, state}
   end
 
   def handle_info(msg, state) do
