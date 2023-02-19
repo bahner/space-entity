@@ -133,6 +133,11 @@ defmodule MyspaceObject do
     {:ok, new!(dag)}
   end
 
+  @spec sign(atom | pid, binary()) :: {:ok, ExPublicKey.signature()}
+  def sign(id, message) do
+    GenServer.call(id, {:sign, message})
+  end
+
   # Getters
   @spec created(t()) :: binary()
   def created(object) do
@@ -167,11 +172,6 @@ defmodule MyspaceObject do
   @spec state(t()) :: binary()
   def state(object) do
     GenServer.call(object.id, :state)
-  end
-
-  @spec sync_process :: :ok
-  def sync_process() do
-    GenServer.cast(self(), :sync_process)
   end
 
   # Getters
@@ -218,43 +218,19 @@ defmodule MyspaceObject do
   end
 
   def handle_call({:sign, message}, _from, state) do
-    {:reply, ExPublicKey.sign(message, Process.get(:private_key)), state}
+    {:reply, ExPublicKey.sign(message, Process.get(:process_ex_private_key)), state}
   end
 
-  # def handle_call({:message, message, recipient}, _from, state) do
-  #   # By using the recipient as the key, we can use the same key to encrypt the message and the signature.
-  #   {:ok, encrypted_message} = ExPublicKey.encrypt_public(message, state.public_key)
-
-  #   message = MyspaceObject.Message.new(encrypted_message, recipient, state.id)
-  #   signed_message = ExPublicKey.sign(message, Process.get(:private_key))
-
-  #   {:reply, signed_message, state}
-  # end
-
-  # def handle_call(msg, _from, state) do
-  #   {:reply, msg, state}
-  # end
+  def handle_call(msg, _from, state) do
+    Logger.warn("Unhandled call: #{inspect(msg)}")
+    {:reply, msg, state}
+  end
 
   # Casts
-  # Don't wait for answers and how to handle them at this point.
-  # Just assume it works.
-
-  def handle_cast(:sync_process, state) do
-    %__MODULE__{
-      state
-      | public_key:
-          MyspaceObject.PublicKey.new(
-            Process.get(:process_public_key_pem),
-            Process.get(:process_public_key_cid)
-          ),
-        ipns: Process.get(:ipns)
-    }
-
-    {:noreply, state}
-  end
 
   @spec handle_cast(any, any, any) :: {:reply, any, any}
   def handle_cast(msg, _from, state) do
+    Logger.warn("Unhandled cast: #{inspect(msg)}")
     {:reply, msg, state}
   end
 

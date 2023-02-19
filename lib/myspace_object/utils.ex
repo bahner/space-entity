@@ -44,6 +44,22 @@ defmodule MyspaceObject.Utils do
     data
   end
 
+  @spec ipld_put!(any) :: MyspaceIPFS.Link.t()
+  def ipld_put!(data) when is_binary(data) do
+    start = Time.utc_now()
+    {:ok, dag} = MyspaceIPFS.Dag.put(data)
+    Logger.debug("Put IPLD contents for dag #{dag} in #{seconds_since(start)} seconds")
+    dag
+  end
+
+  def ipld_put!(data) when is_struct(data) do
+    Map.from_struct(data) |> ipld_put!()
+  end
+
+  def ipld_put!(data) do
+    Jason.encode!(data) |> ipld_put!()
+  end
+
   @doc """
   Takes a struct and returns a map with the same keys and values.
   """
