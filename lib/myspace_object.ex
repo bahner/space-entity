@@ -55,16 +55,19 @@ defmodule MyspaceObject do
           :ignore | {:error, any} | {:ok, pid}
 
   def start_link(object) when is_map(object) do
+    Logger.info("Creating MyspaceObject #{inspect(object)}")
     GenServer.start_link(__MODULE__, object, name: object.id)
   end
 
   def start_link(dag) when is_binary(dag) do
+    Logger.info("Creating MyspaceObject from dag #{inspect(dag)}")
     object = new!(dag)
     GenServer.start_link(__MODULE__, object, name: object.id)
   end
 
   @spec start_link() :: :ignore | {:error, any} | {:ok, pid}
   def start_link() do
+    Logger.info("Creating default MyspaceObject")
     object = new!()
     GenServer.start_link(__MODULE__, object, name: object.id)
   end

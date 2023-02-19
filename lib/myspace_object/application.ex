@@ -6,7 +6,7 @@ defmodule MyspaceObject.Application do
 
   @object_worker %{
     id: MyspaceObject.Supervisor,
-    start: {MyspaceObject.Supervisor, :start_link, [[], [name: MyspaceObject.Supervisor]]},
+    start: {MyspaceObject.Supervisor, :start_link, [[name: MyspaceObject.Supervisor]]},
     type: :supervisor
   }
 
