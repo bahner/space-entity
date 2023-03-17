@@ -10,6 +10,8 @@ defmodule MyspaceObject do
 
   import MyspaceObject.Utils
 
+  @registry :myspace_object_registry
+
   # This starts with an empty object, but this could very well contain lots of stuff.
   @dag "bafyreihpfkdvib5muloxlj5b3tgdwibjdcu3zdsuhyft33z7gtgnlzlkpm"
 
@@ -56,7 +58,8 @@ defmodule MyspaceObject do
 
   def start_link(object) when is_map(object) do
     Logger.info("Creating MyspaceObject #{inspect(object)}")
-    GenServer.start_link(__MODULE__, object, name: object.id)
+    name = via_tuple(object.id)
+    GenServer.start_link(__MODULE__, object, name: name)
   end
 
   def start_link(dag) when is_binary(dag) do
@@ -83,7 +86,7 @@ defmodule MyspaceObject do
     # IPNS will use the existing keypair if it exists.
     # Always update the object the from the DAG, as the DAG is the source of truth.
     tasks = [
-      Task.async(fn -> ipns!(state.id) end),
+      Task.async(fn -> ExIpfsIpns.Key.gen!(state.id) end),
       Task.async(fn -> public_key!(private_key) end)
     ]
 
@@ -259,10 +262,6 @@ defmodule MyspaceObject do
     end
   end
 
-  defp ipns!(id) do
-    get_or_create_ipfs_key!(Atom.to_string(id))
-  end
-
   defp public_key!(private_key) do
     {:ok, pub} = ExPublicKey.public_key_from_private_key(private_key)
     {:ok, public_key_pem} = ExPublicKey.pem_encode(pub)
@@ -279,5 +278,10 @@ defmodule MyspaceObject do
   defp get_task_result(task) do
     {_, {:ok, result}} = task
     result
+  end
+
+  defp via_tuple(topic) when is_binary(topic) do
+    Logger.debug("Registering via tuple for #{topic}")
+    {:via, Registry, {@registry, topic}}
   end
 end

@@ -2,24 +2,13 @@ defmodule MyspaceObject.Utils do
   @moduledoc false
 
   require Logger
-  alias MyspaceIPFS.Key
 
   @doc """
   Creates a channel atom from an ID. Basically, it just prepends "channel@" to the ID.
   """
-  def create_channel_atom(id) do
+  @spec channel_atom(atom) :: atom()
+  def channel_atom(id) do
     String.to_atom("channel@" <> Atom.to_string(id))
-  end
-
-  @doc """
-  Fetches a key from the IPFS keychain. If the key is not found, it is created.
-  """
-  @spec get_or_create_ipfs_key!(binary()) :: binary()
-  def get_or_create_ipfs_key!(id) when is_binary(id) do
-    case get_ipfs_key_name(id) do
-      {:error, :not_found} -> create_ipfs_key!(id)
-      {:ok, key} -> key
-    end
   end
 
   @doc """
@@ -39,15 +28,15 @@ defmodule MyspaceObject.Utils do
   @spec ipld_contents!(binary()) :: any
   def ipld_contents!(dag) when is_binary(dag) do
     start = Time.utc_now()
-    {:ok, data} = MyspaceIPFS.Dag.get(dag)
+    {:ok, data} = ExIpfsIpld.get(dag)
     Logger.debug("Fetched IPLD contents for dag #{dag} in #{seconds_since(start)} seconds")
     data
   end
 
-  @spec ipld_put!(any) :: MyspaceIPFS.Link.t()
+  @spec ipld_put!(any) :: ExIpfs.Link.t()
   def ipld_put!(data) when is_binary(data) do
     start = Time.utc_now()
-    {:ok, dag} = MyspaceIPFS.Dag.put(data)
+    {:ok, dag} = ExIpfsIpld.put(data)
     Logger.debug("Put IPLD contents for dag #{dag} in #{seconds_since(start)} seconds")
     dag
   end
@@ -82,7 +71,7 @@ defmodule MyspaceObject.Utils do
   @spec publish_to_ipfs!(binary()) :: binary()
   def publish_to_ipfs!(public_key_pem) do
     start = Time.utc_now()
-    {:ok, %MyspaceIPFS.AddResult{hash: data}} = MyspaceIPFS.add(public_key_pem)
+    {:ok, %ExIpfs.AddResult{hash: data}} = ExIpfs.add(public_key_pem)
 
     Logger.info(
       "Publication to IPFS returned #{inspect(data)} in #{seconds_since(start)} seconds."
@@ -102,21 +91,5 @@ defmodule MyspaceObject.Utils do
   @spec seconds_since(Time.t()) :: integer
   def seconds_since(start) do
     Time.diff(Time.utc_now(), start)
-  end
-
-  # Following functions are private. I suspect they will just create
-  # a lot of noise in the docs, so I'm hiding them.
-  defp create_ipfs_key!(id) when is_binary(id) do
-    {:ok, key} = Key.gen(id)
-    key["Id"]
-  end
-
-  defp get_ipfs_key_name(id) when is_binary(id) do
-    {:ok, %{"Keys" => keys}} = Key.list(l: true)
-
-    case Enum.find(keys, fn key -> key["Name"] == id end) do
-      nil -> {:error, :not_found}
-      key -> {:ok, key["Id"]}
-    end
   end
 end

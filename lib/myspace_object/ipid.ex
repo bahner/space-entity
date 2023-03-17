@@ -18,7 +18,7 @@ defmodule MyspaceObject.Ipid do
             context: @context,
             created: now(),
             updated: now(),
-            public_key: MyspaceObject.Link.new("")
+            public_key: ExIpfs.Link.new("")
 
   @typedoc """
   The IPID is the object that is stored in the Myspace.
@@ -28,7 +28,7 @@ defmodule MyspaceObject.Ipid do
           context: list(),
           created: binary(),
           updated: binary(),
-          public_key: MyspaceObject.Link.t()
+          public_key: ExIpfs.Link.t()
         }
 
   @spec start_link :: :ignore | {:error, any} | {:ok, pid}
@@ -39,7 +39,7 @@ defmodule MyspaceObject.Ipid do
 
   # @spec get!(binary()) :: t()
   # def get!(id) do
-  #   data = MyspaceIPFS.get(id)
+  #   data = ExIpfs.get(id)
   #   data
   #   # data = Jason.decode!("#{data}")
 
@@ -57,7 +57,7 @@ defmodule MyspaceObject.Ipid do
     %__MODULE__{
       id: did_gen!(object),
       context: @context,
-      public_key: MyspaceObject.Link.new(object.public_key.cid),
+      public_key: ExIpfs.Link.new(object.public_key.cid),
       created: object.created,
       updated: now()
     }
@@ -75,7 +75,7 @@ defmodule MyspaceObject.Ipid do
   @spec publish(MyspaceObject.t()) :: :ok
   def publish(object) do
     # This is a pipeline. Send it to add, which will then pass it to publish.
-    # ipid_add wll never need to be called directly. Use MyspaceIPFS.add directly
+    # ipid_add wll never need to be called directly. Use ExIpfs.add directly
     # for that.
     GenServer.cast(__MODULE__, {:ipid_publish_add, object})
     :ok
@@ -130,7 +130,7 @@ defmodule MyspaceObject.Ipid do
 
   defp ipid_publish_add(ipid) do
     start = Time.utc_now()
-    {:ok, cid} = MyspaceIPFS.add(json_encode_struct(ipid))
+    {:ok, cid} = ExIpfs.add(json_encode_struct(ipid))
     Logger.info("Publication of IPID yielding #{cid} finished in #{seconds_since(start)} seconds")
     {:ipid_publish_add_reply, {cid, ipid}}
   end
@@ -140,7 +140,7 @@ defmodule MyspaceObject.Ipid do
     # Here we extract the fragment from the IPID, and use it to lookup up the
     # key. If it doesn't match the IPNS name hash then the id is useless.
     # That's supposed to be a good thing.
-    MyspaceIPFS.Name.publish(cid, key: did_fragment!(ipid.id))
+    ExIpfsIpns.publish(cid, key: did_fragment!(ipid.id))
     Logger.debug("Publication of IPID finished in #{seconds_since(start)} seconds")
     :ok
   end
