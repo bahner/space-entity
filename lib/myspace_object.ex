@@ -9,19 +9,21 @@ defmodule MyspaceObject do
   require Logger
 
   import MyspaceObject.Utils
+  alias MyspaceObject.PublicKey
 
   @registry :myspace_object_registry
-
+  alias MyspaceObject.PublicKey
   # This starts with an empty object, but this could very well contain lots of stuff.
   @dag "bafyreihpfkdvib5muloxlj5b3tgdwibjdcu3zdsuhyft33z7gtgnlzlkpm"
 
-  @enforce_keys [:id, :created, :dag]
+  @enforce_keys [:id, :created, :dag, :object]
   defstruct id: nil,
-            created: nil,
-            dag: nil,
-            ipns: "",
+            created: now(),
+            updated: now(),
+            dag: @dag,
             object: %{},
-            public_key: MyspaceObject.PublicKey.new("")
+            ipns: nil,
+            public_key: nil
 
   @typedoc """
   The MyspaceObject is created with an atom as its name.
@@ -37,12 +39,13 @@ defmodule MyspaceObject do
   """
 
   @type t :: %__MODULE__{
-          id: atom(),
-          created: binary(),
-          dag: binary(),
-          ipns: binary() | nil,
-          object: map(),
-          public_key: MyspaceObject.PublicKey.t()
+          id: atom,
+          created: binary,
+          updated: binary,
+          dag: binary,
+          object: any,
+          ipns: binary | nil,
+          public_key: MyspaceObject.PublicKey.t() | nil
         }
 
   @doc """
@@ -58,8 +61,8 @@ defmodule MyspaceObject do
 
   def start_link(object) when is_map(object) do
     Logger.info("Creating MyspaceObject #{inspect(object)}")
-    name = via_tuple(object.id)
-    GenServer.start_link(__MODULE__, object, name: name)
+    via_tuple = {:via, Registry, {@registry, object.id}}
+    GenServer.start_link(__MODULE__, object, name: via_tuple)
   end
 
   def start_link(dag) when is_binary(dag) do
@@ -79,34 +82,34 @@ defmodule MyspaceObject do
   def init(state) when is_map(state) do
     # Mark process as sensitive, then call tasks in parallel to populate the process stack.
     Process.flag(:sensitive, true)
-    {:ok, private_key} = ExPublicKey.generate_key()
-    Process.put(:process_ex_private_key, private_key)
 
-    # Public and IPNS should always be generated.
+    {:ok, ex_private_key} = ExPublicKey.generate_key()
+    Process.put(:process_ex_private_key, ex_private_key)
+
+    {:ok, ex_public_key} = ExPublicKey.public_key_from_private_key(ex_private_key)
+    {:ok, ex_public_key_pem} = ExPublicKey.pem_encode(ex_public_key)
+
+    # Public and IPNS should always be generated or updated .
     # IPNS will use the existing keypair if it exists.
     # Always update the object the from the DAG, as the DAG is the source of truth.
     tasks = [
-      Task.async(fn -> ExIpfsIpns.Key.gen!(state.id) end),
-      Task.async(fn -> public_key!(private_key) end)
+      Task.async(fn -> get_or_create_ipns_key(state.id) end),
+      Task.async(fn -> PublicKey.new(ex_public_key_pem) end),
+      Task.async(fn -> ExIpfsIpld.get(state.dag) end),
     ]
 
-    [ipns | [public_key]] = Enum.map(Task.yield_many(tasks), &get_task_result/1)
+    [ipns | tail] = Enum.map(Task.yield_many(tasks), &unwrap_task/1)
+    [public_key | [object]] = tail
 
-    object = %__MODULE__{
-      id: state.id,
-      created: state.created,
-      dag: state.dag,
-      ipns: ipns,
-      object: ipld_contents!(state.dag),
-      public_key: public_key
-    }
+    case object do
+      {:ok, object} ->
+        Logger.info("MyspaceObject #{inspect(state)} created")
+        {:ok, %__MODULE__{state | ipns: ipns, public_key: public_key, object: object}}
 
-    # Publish the IPID object to IPNS.
-    # This might take a little while, so we do it in the background.
-    # We are not likely to receive any messages before this is done.
-    Task.async(fn -> MyspaceObject.Ipid.publish(object) end)
-
-    {:ok, object}
+      {:error, error} ->
+        Logger.error("MyspaceObject #{inspect(state)} failed to create: #{inspect(error)}")
+        {:stop, error}
+    end
   end
 
   # FIXME: this should probably be handled by a task supervisor or a rest supervisor.
@@ -118,25 +121,23 @@ defmodule MyspaceObject do
   # This is because the public key is derived from a secret key, which is not available at this point.
   @spec new!(binary()) :: t()
   def new!(dag \\ @dag) when is_binary(dag) do
-    Logger.info("Creating new MyspaceObject from #{dag}")
+    # Logger.info("Creating new MyspaceObject from #{dag}")
     id = Nanoid.generate()
+    {:ok, ipns} = get_or_create_ipns_key(id)
+    {:ok, object} = ExIpfsIpld.get(dag)
 
     %__MODULE__{
       id: String.to_atom(id),
       created: now(),
+      updated: now(),
       dag: dag,
-      ipns: "",
-      object: ipld_contents!(dag),
-      public_key: MyspaceObject.PublicKey.new!("")
+      object: object,
+      ipns: ipns.id,
+      public_key: nil,
     }
   end
 
-  @spec new(binary()) :: {:ok, t()}
-  def new(dag \\ @dag) when is_binary(dag) do
-    {:ok, new!(dag)}
-  end
-
-  @spec sign(atom | pid, binary()) :: {:ok, ExPublicKey.signature()}
+  @spec sign(atom | pid, binary()) :: {:ok, binary()} | {:error, any}
   def sign(id, message) do
     GenServer.call(id, {:sign, message})
   end
@@ -262,26 +263,9 @@ defmodule MyspaceObject do
     end
   end
 
-  defp public_key!(private_key) do
-    {:ok, pub} = ExPublicKey.public_key_from_private_key(private_key)
-    {:ok, public_key_pem} = ExPublicKey.pem_encode(pub)
-
-    # This operation might take time.
-    public_key_cid = publish_to_ipfs!(public_key_pem)
-
-    %MyspaceObject.PublicKey{
-      pem: public_key_pem,
-      cid: public_key_cid
-    }
-  end
-
-  defp get_task_result(task) do
-    {_, {:ok, result}} = task
-    result
-  end
-
-  defp via_tuple(topic) when is_binary(topic) do
-    Logger.debug("Registering via tuple for #{topic}")
-    {:via, Registry, {@registry, topic}}
+  defp unwrap_task(data) do
+    case data do
+      {_, {:ok, result}} -> result
+    end
   end
 end

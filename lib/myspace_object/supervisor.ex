@@ -26,9 +26,4 @@ defmodule MyspaceObject.Supervisor do
 
     DynamicSupervisor.start_child(__MODULE__, ipid_spec)
   end
-
-  @spec whereis_ipid(binary) :: any
-  def whereis_ipid(ipid) when is_binary(ipid) do
-    GenServer.call(@registry, {:whereis_name, ipid})
-  end
 end

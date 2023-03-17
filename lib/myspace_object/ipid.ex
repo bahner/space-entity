@@ -13,6 +13,8 @@ defmodule MyspaceObject.Ipid do
     "https://w3id.org/security/suites/ed25519-2020/v1"
   ]
 
+  @registry :myspace_object_ipid_registry
+
   @enforce_keys [:id, :context, :created, :public_key]
   defstruct id: nil,
             context: @context,
@@ -28,29 +30,17 @@ defmodule MyspaceObject.Ipid do
           context: list(),
           created: binary(),
           updated: binary(),
-          public_key: ExIpfs.Link.t()
+          public_key: ExIpfs.link()
         }
 
-  @spec start_link :: :ignore | {:error, any} | {:ok, pid}
-  def start_link, do: GenServer.start(__MODULE__, %{}, name: __MODULE__)
+  @spec start_link(t) :: :ignore | {:error, any} | {:ok, pid}
+  def start_link(ipid) do
+    via_tuple = {:via, Registry, {@registry, ipid.id}}
+    GenServer.start(__MODULE__, ipid, name: via_tuple)
+  end
 
   @spec init(map) :: {:ok, nil}
   def init(state), do: {:ok, state}
-
-  # @spec get!(binary()) :: t()
-  # def get!(id) do
-  #   data = ExIpfs.get(id)
-  #   data
-  #   # data = Jason.decode!("#{data}")
-
-  #   # %__MODULE__{
-  #   #   id: data.id,
-  #   #   context: data["@context"],
-  #   #   public_key: data.public_key,
-  #   #   created: data.created,
-  #   #   updated: data.updated
-  #   # }
-  # end
 
   @spec new!(MyspaceObject.t()) :: t()
   def new!(object) when is_map(object) do
