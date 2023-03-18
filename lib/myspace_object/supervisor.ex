@@ -3,7 +3,7 @@ defmodule MyspaceObject.Supervisor do
 
   use DynamicSupervisor, restart: :transient
 
-  @typep ipid :: MyspaceObject.t()
+  @typep object :: MyspaceObject.t()
   @registry :myspace_object_registry
 
   @spec start_link(Init_args) :: :ignore | {:error, any} | {:ok, pid}
@@ -17,13 +17,13 @@ defmodule MyspaceObject.Supervisor do
     DynamicSupervisor.init(args)
   end
 
-  @spec start_ipid(ipid) :: DynamicSupervisor.on_start_child()
-  def start_ipid(ipid) when is_struct(ipid) do
-    ipid_spec = %{
-      id: ipid.id,
-      start: {MyspaceObject, :start_link, [ipid]}
+  @spec start_object(object) :: DynamicSupervisor.on_start_child()
+  def start_object(object) when is_struct(object) do
+    object_spec = %{
+      id: object.id,
+      start: {MyspaceObject, :start_link, [object]}
     }
 
-    DynamicSupervisor.start_child(__MODULE__, ipid_spec)
+    DynamicSupervisor.start_child(__MODULE__, object_spec)
   end
 end

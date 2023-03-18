@@ -40,7 +40,7 @@ defmodule MyspaceObject do
   """
 
   @type t :: %__MODULE__{
-          id: atom,
+          id: binary,
           created: binary,
           updated: binary,
           dag: binary,
@@ -69,17 +69,19 @@ defmodule MyspaceObject do
   def start_link(dag) when is_binary(dag) do
     Logger.info("Creating MyspaceObject from dag #{inspect(dag)}")
     {:ok, object} = new(dag)
-    GenServer.start_link(__MODULE__, object, name: object.id)
+    via_tuple = {:via, Registry, {@registry, object.id}}
+    GenServer.start_link(__MODULE__, object, name: via_tuple)
   end
 
   @spec start_link() :: :ignore | {:error, any} | {:ok, pid}
   def start_link() do
     Logger.info("Creating default MyspaceObject")
     {:ok, object} = new()
-    GenServer.start_link(__MODULE__, object, name: object.id)
+    via_tuple = {:via, Registry, {@registry, object.id}}
+    GenServer.start_link(__MODULE__, object, name: via_tuple)
   end
 
-  @spec init(t()) :: {:ok, t()}
+  @spec init(t()) :: {:ok, t()} | {:stop, any}
   def init(state) when is_map(state) do
     # Mark process as sensitive, then call tasks in parallel to populate the process stack.
     Process.flag(:sensitive, true)
@@ -93,6 +95,7 @@ defmodule MyspaceObject do
     # Public and IPNS should always be generated or updated .
     # IPNS will use the existing keypair if it exists.
     # Always update the object the from the DAG, as the DAG is the source of truth.
+
     tasks = [
       Task.async(fn -> Key.get_or_create(state.id) end),
       Task.async(fn -> PublicKey.new(ex_public_key_pem) end),
@@ -122,20 +125,22 @@ defmodule MyspaceObject do
   # This is because the public key is derived from a secret key, which is not available at this point.
   @spec new(binary()) :: {:ok, t()}
   def new(dag \\ @dag) when is_binary(dag) do
-    # Logger.info("Creating new MyspaceObject from #{dag}")
     id = Nanoid.generate()
+
+    # Logger.info("Creating new MyspaceObject from #{dag}")
     {:ok, ipns} = Key.get_or_create(id)
     {:ok, object} = ExIpfsIpld.get(dag)
 
-    {:ok, %__MODULE__{
-      id: String.to_atom(id),
-      created: now(),
-      updated: now(),
-      dag: dag,
-      object: object,
-      ipns: ipns.id,
-      public_key: nil
-    }}
+    {:ok,
+     %__MODULE__{
+       id: id,
+       created: now(),
+       updated: now(),
+       dag: dag,
+       object: object,
+       ipns: ipns.id,
+       public_key: nil
+     }}
   end
 
   @spec sign(atom | pid, binary()) :: {:ok, binary()} | {:error, any}
@@ -146,37 +151,37 @@ defmodule MyspaceObject do
   # Getters
   @spec created(t()) :: binary()
   def created(object) do
-    GenServer.call(object.id, :created)
+    GenServer.call(via_tuple(object.id), :created)
   end
 
   @spec dag(t()) :: binary()
   def dag(object) do
-    GenServer.call(object.id, :dag)
+    GenServer.call(via_tuple(object.id), :dag)
   end
 
   @spec ipns(t()) :: binary()
   def ipns(object) do
-    GenServer.call(object.id, :ipns)
+    GenServer.call(via_tuple(object.id), :ipns)
   end
 
   @spec ipid(t()) :: MyspaceObject.Ipid.t()
   def ipid(object) do
-    GenServer.call(object.id, :ipid)
+    GenServer.call(via_tuple(object.id), :ipid)
   end
 
   @spec object(t()) :: binary()
   def object(object) do
-    GenServer.call(object.id, :object)
+    GenServer.call(via_tuple(object.id), :object)
   end
 
   @spec public_key(t()) :: binary()
   def public_key(object) do
-    GenServer.call(object.id, :public_key)
+    GenServer.call(via_tuple(object.id), :public_key)
   end
 
   @spec state(t()) :: binary()
   def state(object) do
-    GenServer.call(object.id, :state)
+    GenServer.call(via_tuple(object.id), :state)
   end
 
   # Getters
@@ -193,7 +198,7 @@ defmodule MyspaceObject do
   end
 
   def handle_call(:ipid, _from, state) do
-    {:reply, MyspaceObject.Ipid.new!(state), state}
+    {:reply, MyspaceObject.Ipid.new(state), state}
   end
 
   def handle_call(:ipns, _from, state) do
@@ -268,5 +273,9 @@ defmodule MyspaceObject do
     case data do
       {_, {:ok, result}} -> result
     end
+  end
+
+  defp via_tuple(pid, registry \\ @registry) do
+    {:via, Registry, {registry, pid}}
   end
 end

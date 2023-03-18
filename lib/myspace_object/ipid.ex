@@ -20,7 +20,7 @@ defmodule MyspaceObject.Ipid do
             context: @context,
             created: now(),
             updated: now(),
-            public_key: ExIpfs.Link.new("")
+            public_key: nil
 
   @typedoc """
   The IPID is the object that is stored in the Myspace.
@@ -30,58 +30,57 @@ defmodule MyspaceObject.Ipid do
           context: list(),
           created: binary(),
           updated: binary(),
-          public_key: ExIpfs.link()
+          public_key: binary()
         }
+
+  @typep object :: MyspaceObject.t()
 
   @spec start_link(t) :: :ignore | {:error, any} | {:ok, pid}
   def start_link(ipid) do
-    via_tuple = {:via, Registry, {@registry, ipid.id}}
-    GenServer.start(__MODULE__, ipid, name: via_tuple)
+    GenServer.start(__MODULE__, ipid, name: via_tuple(ipid.id))
   end
 
   @spec init(map) :: {:ok, nil}
   def init(state), do: {:ok, state}
 
-  @spec new!(MyspaceObject.t()) :: t()
-  def new!(object) when is_map(object) do
-    %__MODULE__{
+  @doc """
+  Create a new IPID from a MyspaceObject.
+  """
+  @spec new(object) :: {:ok, t()}
+  def new(object) when is_struct(object) do
+    {:ok, %__MODULE__{
       id: did_gen!(object),
       context: @context,
-      public_key: ExIpfs.Link.new(object.public_key.cid),
+      public_key: object.public_key.pem,
       created: object.created,
       updated: now()
-    }
-  end
-
-  @spec new(MyspaceObject.t()) :: {:ok, t()}
-  def new(object) when is_map(object) do
-    {:ok, new!(object)}
+    }}
   end
 
   @doc """
   Publish the IPID to IPFS. Returns :ok here, and then delivers the ipid
   back to the calling process, in a {:ipid_publish, MySpaceObject.ipid()} message.
   """
-  @spec publish(MyspaceObject.t()) :: :ok
+  @spec publish(object) :: :ok
   def publish(object) do
     # This is a pipeline. Send it to add, which will then pass it to publish.
     # ipid_add wll never need to be called directly. Use ExIpfs.add directly
     # for that.
-    GenServer.cast(__MODULE__, {:ipid_publish_add, object})
+    GenServer.cast(via_tuple(object.id), {:ipid_publish, object})
     :ok
   end
 
-  @spec handle_cast(any, any, any) :: {:noreply, any}
-  @doc """
-  Publish the IPID to IPFS. Returns the IPFS CID of the IPID.
-  """
-  def handle_cast({:ipid_publish_add, object}, _from, state) do
-    Task.async(fn -> ipid_publish_add(object) end)
+  def handle_cast({:ipid_publish, object}, state) do
+    state = %__MODULE__{state | updated: now(), public_key: object.public_key.pem}
+    ipid_publish(state)
     {:noreply, state}
   end
 
-  def handle_info({:ipid_publish_add_reply, {cid, ipid}}, state) do
-    Task.async(fn -> ipid_publish({cid, ipid}) end)
+  def handle_cast(_, state) do
+    {:noreply, state}
+  end
+
+  def handle_info(_, state) do
     {:noreply, state}
   end
 
@@ -114,24 +113,23 @@ defmodule MyspaceObject.Ipid do
   Generate an IPID from the IPNS name and the NanoID.
   """
   @spec did_gen!(MyspaceObject.t()) :: binary()
-  def did_gen!(object) when is_atom(object.id) and is_binary(object.ipns) do
-    "did:ipid:" <> object.ipns <> "#" <> Atom.to_string(object.id)
+  def did_gen!(object) when is_binary(object.id) and is_binary(object.ipns) do
+    "did:ipid:" <> object.ipns <> "#" <> object.id
   end
 
-  defp ipid_publish_add(ipid) do
+  defp ipid_publish(ipid) when is_struct(ipid) do
+    Logger.debug("Publishing IPID #{ipid.id} to IPFS")
     start = Time.utc_now()
-    {:ok, cid} = ExIpfs.add(json_encode_struct(ipid))
-    Logger.info("Publication of IPID yielding #{cid} finished in #{seconds_since(start)} seconds")
-    {:ipid_publish_add_reply, {cid, ipid}}
-  end
 
-  defp ipid_publish({cid, ipid}) when is_binary(cid) do
-    start = Time.utc_now()
-    # Here we extract the fragment from the IPID, and use it to lookup up the
-    # key. If it doesn't match the IPNS name hash then the id is useless.
-    # That's supposed to be a good thing.
-    ExIpfsIpns.publish(cid, key: did_fragment!(ipid.id))
+    key = did_fragment!(ipid.id)
+    {:ok, add_result} = ExIpfs.add(json_encode_struct(ipid))
+
+    ExIpfsIpns.publish(add_result.hash, key: key)
     Logger.debug("Publication of IPID finished in #{seconds_since(start)} seconds")
     :ok
+  end
+
+  defp via_tuple(name, registry \\ @registry) do
+    {:via, Registry, {registry, name}}
   end
 end
