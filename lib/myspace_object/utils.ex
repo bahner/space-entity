@@ -6,17 +6,6 @@ defmodule MyspaceObject.Utils do
   @typep api_error :: ExIpfs.Api.error()
 
   @doc """
-  Returns the IPNS key for the given name.
-  """
-  @spec get_or_create_ipns_key(binary()) :: {:ok, ExIpfsIpns.Key.t()} | api_error
-  def get_or_create_ipns_key(name) do
-    case ExIpfsIpns.Key.exists?(name) do
-      true -> ExIpfsIpns.Key.search(name)
-      false -> ExIpfsIpns.Key.gen(name)
-    end
-  end
-
-  @doc """
   Takes a struct and returns a map with the same keys and values.
   """
   @spec json_encode_struct(struct) :: binary

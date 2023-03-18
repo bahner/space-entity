@@ -32,7 +32,7 @@ defmodule MyspaceObject.MixProject do
       {:ex_crypto, "~> 0.10.0"},
       {:ex_ipfs, "~> 0.1.4"},
       {:ex_ipfs_ipld, "~> 0.0.1"},
-      {:ex_ipfs_ipns, "~> 0.0.2"},
+      {:ex_ipfs_ipns, "~> 0.0.3"},
       {:ex_ipfs_pubsub, "~> 0.0.1"},
       {:nanoid, "~> 2.0"},
       {:credo, "~> 1.6", only: [:dev, :test], runtime: false},

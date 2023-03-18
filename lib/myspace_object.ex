@@ -10,6 +10,7 @@ defmodule MyspaceObject do
 
   import MyspaceObject.Utils
   alias MyspaceObject.PublicKey
+  alias ExIpfsIpns.Key
 
   @registry :myspace_object_registry
   alias MyspaceObject.PublicKey
@@ -67,14 +68,14 @@ defmodule MyspaceObject do
 
   def start_link(dag) when is_binary(dag) do
     Logger.info("Creating MyspaceObject from dag #{inspect(dag)}")
-    object = new!(dag)
+    {:ok, object} = new(dag)
     GenServer.start_link(__MODULE__, object, name: object.id)
   end
 
   @spec start_link() :: :ignore | {:error, any} | {:ok, pid}
   def start_link() do
     Logger.info("Creating default MyspaceObject")
-    object = new!()
+    {:ok, object} = new()
     GenServer.start_link(__MODULE__, object, name: object.id)
   end
 
@@ -93,9 +94,9 @@ defmodule MyspaceObject do
     # IPNS will use the existing keypair if it exists.
     # Always update the object the from the DAG, as the DAG is the source of truth.
     tasks = [
-      Task.async(fn -> get_or_create_ipns_key(state.id) end),
+      Task.async(fn -> Key.get_or_create(state.id) end),
       Task.async(fn -> PublicKey.new(ex_public_key_pem) end),
-      Task.async(fn -> ExIpfsIpld.get(state.dag) end),
+      Task.async(fn -> ExIpfsIpld.get(state.dag) end)
     ]
 
     [ipns | tail] = Enum.map(Task.yield_many(tasks), &unwrap_task/1)
@@ -119,22 +120,22 @@ defmodule MyspaceObject do
 
   # Returns a skeleton object. It lacks a public key, but that is added later.
   # This is because the public key is derived from a secret key, which is not available at this point.
-  @spec new!(binary()) :: t()
-  def new!(dag \\ @dag) when is_binary(dag) do
+  @spec new(binary()) :: {:ok, t()}
+  def new(dag \\ @dag) when is_binary(dag) do
     # Logger.info("Creating new MyspaceObject from #{dag}")
     id = Nanoid.generate()
-    {:ok, ipns} = get_or_create_ipns_key(id)
+    {:ok, ipns} = Key.get_or_create(id)
     {:ok, object} = ExIpfsIpld.get(dag)
 
-    %__MODULE__{
+    {:ok, %__MODULE__{
       id: String.to_atom(id),
       created: now(),
       updated: now(),
       dag: dag,
       object: object,
       ipns: ipns.id,
-      public_key: nil,
-    }
+      public_key: nil
+    }}
   end
 
   @spec sign(atom | pid, binary()) :: {:ok, binary()} | {:error, any}
