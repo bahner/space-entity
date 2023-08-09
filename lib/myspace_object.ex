@@ -16,6 +16,7 @@ defmodule MyspaceObject do
   alias MyspaceObject.PublicKey
   # This starts with an empty object, but this could very well contain lots of stuff.
   @dag "bafyreihpfkdvib5muloxlj5b3tgdwibjdcu3zdsuhyft33z7gtgnlzlkpm"
+  @pubsub {:myspace, :"pubsub@localhost"}
 
   @enforce_keys [:id, :created, :dag, :object]
   defstruct id: nil,
@@ -99,11 +100,13 @@ defmodule MyspaceObject do
     tasks = [
       Task.async(fn -> Key.get_or_create(state.id) end),
       Task.async(fn -> PublicKey.new(ex_public_key_pem) end),
-      Task.async(fn -> ExIpfsIpld.get(state.dag) end)
+      Task.async(fn -> ExIpfsIpld.get(state.dag) end),
     ]
 
     [ipns | tail] = Enum.map(Task.yield_many(tasks), &unwrap_task/1)
     [public_key | [object]] = tail
+
+    Task.async(fn -> GenServer.call(@pubsub, state.ipns) end)
 
     case object do
       {:ok, object} ->
@@ -197,9 +200,9 @@ defmodule MyspaceObject do
     {:reply, state.id, state}
   end
 
-  def handle_call(:ipid, _from, state) do
-    {:reply, MyspaceObject.Ipid.new(state), state}
-  end
+  # def handle_call(:ipid, _from, state) do
+  #   {:reply, MyspaceObject.Ipid.new(state), state}
+  # end
 
   def handle_call(:ipns, _from, state) do
     {:reply, state.ipns, state}
