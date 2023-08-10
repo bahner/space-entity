@@ -255,6 +255,11 @@ defmodule MyspaceObject do
     {:noreply, %{state | dag: dag}}
   end
 
+  def handle_info({:go_myspace_create_topic, t}, state) do
+    Logger.info("MyspaceObject: Created IPFS pubsub channel #{t}")
+    {:noreply, state}
+  end
+
   def handle_info({:myspace_ipfs_pubsub_channel_message, msg}, state) do
     IO.puts("MyspaceObject: IPFS pubsub channel message #{msg} received.")
     {:noreply, state}
