@@ -5,7 +5,7 @@ defmodule MyspaceObject.PublicKey do
   Receives message from IPFS and conserves it state as a dag and can state it config to the Myspace.
   """
 
-  @enforce_keys [:pem]
+  @enforce_keys [:pem, :cid]
 
   defstruct cid: nil, pem: nil
 
@@ -13,23 +13,21 @@ defmodule MyspaceObject.PublicKey do
   This is the way DAG are represented in the IPLD.
   """
   @type t :: %__MODULE__{
-          cid: binary() | nil,
+          cid: binary(),
           pem: binary()
         }
 
   @doc """
-  Returns the IPLD link to the object.
+  Returns a new MyspaceObject.PublicKey struct. From a PEM encoded public key.
   """
-  @spec new!(binary, binary | nil) :: t()
-  def new!(pem, cid \\ nil) when is_binary(pem) do
-    %__MODULE__{
-      cid: cid,
-      pem: pem
-    }
-  end
+  @spec new(binary) :: {:ok, t()}
+  def new(pem) when is_binary(pem) do
+    {:ok, %ExIpfs.AddResult{hash: cid}} = ExIpfs.add(pem)
 
-  @spec new(binary, binary | nil) :: {:ok, t()}
-  def new(pem, cid \\ nil) when is_binary(pem) do
-    {:ok, new!(pem, cid)}
+    {:ok,
+     %__MODULE__{
+       cid: cid,
+       pem: pem
+     }}
   end
 end

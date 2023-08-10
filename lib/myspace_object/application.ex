@@ -1,12 +1,18 @@
 defmodule MyspaceObject.Application do
-  @moduledoc """
-  The MyspaceObject.Application is the main application for MyspaceObject.
-  """
+  @moduledoc false
   use Application
 
-  @impl true
-  @spec start(any, any) :: {:error, any} | {:ok, pid()} | {:ok, pid(), any}
+  @registry :myspace_object_registry
+  @supervisor MyspaceObject.Supervisor
+
+  @spec start(any, any) :: {:error, any} | {:ok, pid}
   def start(_type, _args) do
-    MyspaceObject.Supervisor.start_link()
+    children = [
+      {Registry, [keys: :unique, name: @registry]},
+      {@supervisor, name: @supervisor}
+    ]
+
+    opts = [strategy: :one_for_one]
+    Supervisor.start_link(children, opts)
   end
 end

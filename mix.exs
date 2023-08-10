@@ -29,9 +29,12 @@ defmodule MyspaceObject.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:nanoid, "~> 2.0"},
       {:ex_crypto, "~> 0.10.0"},
-      {:myspace_ipfs, "~> 0.2.0-alpha"},
+      {:ex_ipfs, "~> 0.1.4"},
+      {:ex_ipfs_ipld, "~> 0.0.1"},
+      {:ex_ipfs_ipns, "~> 0.0.3"},
+      {:ex_ipfs_pubsub, "~> 0.0.1"},
+      {:nanoid, "~> 2.0"},
       {:credo, "~> 1.6", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.2", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.29", only: :dev, runtime: false},

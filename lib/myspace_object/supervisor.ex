@@ -1,64 +1,29 @@
 defmodule MyspaceObject.Supervisor do
-  @moduledoc """
-  The MyspaceObject.Supervisor is a supervisor for a colletion of MyspaceObject.
-  """
-  use Supervisor
+  @moduledoc false
 
-  @spec start_link(list(MyspaceObject.t()) | MyspaceObject.t()) ::
-          :ignore | {:error, any} | {:ok, pid}
-  def start_link(objects) when is_list(objects) do
-    Supervisor.start_link(__MODULE__, objects, name: __MODULE__)
+  use DynamicSupervisor, restart: :transient
+
+  @typep object :: MyspaceObject.t()
+  @registry :myspace_object_registry
+
+  @spec start_link(Init_args) :: :ignore | {:error, any} | {:ok, pid}
+  def start_link(init_args) do
+    DynamicSupervisor.start_link(__MODULE__, init_args, name: __MODULE__)
   end
 
-  def start_link(object) when is_map(object) do
-    Supervisor.start_link(__MODULE__, [object], name: __MODULE__)
+  @spec init(any) :: :ignore | {:ok, DynamicSupervisor.sup_flags()}
+  def init(_init_args) do
+    args = [strategy: :one_for_one]
+    DynamicSupervisor.init(args)
   end
 
-  @spec start_link :: :ignore | {:error, any} | {:ok, pid}
-  def start_link() do
-    Supervisor.start_link(__MODULE__, :ok, name: __MODULE__)
-  end
+  @spec start_object(object) :: DynamicSupervisor.on_start_child()
+  def start_object(object) when is_struct(object) do
+    object_spec = %{
+      id: object.id,
+      start: {MyspaceObject, :start_link, [object]}
+    }
 
-  def init(objects) when is_list(objects) do
-    children = create_children(objects)
-    Supervisor.init(children, strategy: :one_for_one)
-  end
-
-  def init(:ok) do
-    Supervisor.init([], strategy: :one_for_one)
-  end
-
-  @spec add(MyspaceObject.t()) :: :ok
-  def add(object) do
-    Enum.each(create_object_children(object), fn child ->
-      Supervisor.start_child(__MODULE__, child)
-    end)
-
-    :ok
-  end
-
-  @spec create_object_children(MyspaceObject.t()) :: [Supervisor.child_spec()]
-  defp create_object_children(object) do
-    [
-      %{
-        id: object.id,
-        start: {MyspaceObject, :start_link, [object]}
-      },
-      %{
-        id: create_channel_atom(object.id),
-        start: {MyspaceIPFS.PubSubChannel, :start_link, [object.id, Atom.to_string(object.id)]}
-      }
-    ]
-  end
-
-  @spec create_children(list(MyspaceObject.t())) :: list
-  defp create_children(objects) do
-    objects
-    |> Enum.map(&create_object_children/1)
-    |> List.flatten()
-  end
-
-  defp create_channel_atom(id) do
-    String.to_atom("channel@" <> Atom.to_string(id))
+    DynamicSupervisor.start_child(__MODULE__, object_spec)
   end
 end
